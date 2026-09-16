@@ -1,0 +1,59 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed-pkgs
+*.egg
+
+# ===== 虚拟环境 =====
+.venv/
+venv/
+env/
+ENV/
+
+# ===== PyInstaller 打包产物（保留 .spec 配置文件）=====
+build/
+dist/
+
+# ===== 与本项目无关的目录 =====
+CarLauncher/
+
+# ===== 日志与运行时文件 =====
+logs/
+*.log
+
+# ===== 测试 / 类型检查缓存 =====
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ===== IDE / 编辑器 =====
+.idea/
+*.swp
+*.swo
+
+# ===== 操作系统 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 临时文件 =====
+*.tmp
+*.bak

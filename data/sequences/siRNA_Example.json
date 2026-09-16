@@ -1,0 +1,6 @@
+{
+  "name": "siRNA_Example",
+  "sequence": "CUAGCUAGCUAGCUAGCUAGC",
+  "description": "示例siRNA序列，靶向mRNA的第5-25位",
+  "length": 21
+}
