@@ -35,7 +35,10 @@ class NucleicAcidDesigner:
     def complement(self, sequence: str) -> str:
         sequence = sequence.replace('T', 'U').replace('t', 'u')
         return ''.join([self.complement_map.get(base, base) for base in sequence])
-
+    """
+    NCBI库中的Mrna序列是由ATGC组成的，需要转换为AUGC序列,才能用于序列合成。
+    """
+    
     def reverse_complement(self, sequence: str) -> str:
         return self.complement(sequence)[::-1]
 
