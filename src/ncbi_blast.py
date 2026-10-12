@@ -80,6 +80,9 @@ class NCBIBLAST:
                     return ('RUNNING', None)
                 elif 'Status=COMPLETE' in text:
                     return ('COMPLETE', text)
+                elif text.lstrip().startswith('<?xml') or '<BlastOutput' in text:
+                    # 真实 NCBI 任务完成时直接返回 XML 结果，不带 Status 标记，视为完成
+                    return ('COMPLETE', text)
                 else:
                     return ('FAILED', None)
             
