@@ -4,6 +4,10 @@ import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Tuple
 import json
 
+from src.logger import get_logger
+
+logger = get_logger(__name__)
+
 class NCBIBLAST:
     """NCBI BLAST API客户端"""
     
@@ -47,11 +51,13 @@ class NCBIBLAST:
                 if start != -1:
                     end = text.find('\n', start)
                     if end != -1:
-                        return text[start+6:end].strip()
+                        rid = text[start+6:end].strip()
+                        logger.info('BLAST提交成功，RID: %s', rid)
+                        return rid
             
             return None
         except Exception as e:
-            print(f"BLAST提交失败: {e}")
+            logger.error(f"BLAST提交失败: {e}")
             return None
     
     def check_status(self, request_id: str) -> Tuple[str, Optional[str]]:
@@ -88,7 +94,7 @@ class NCBIBLAST:
             
             return ('FAILED', None)
         except Exception as e:
-            print(f"检查状态失败: {e}")
+            logger.error(f"检查状态失败: {e}")
             return ('FAILED', None)
     
     def run_blast(self, sequence: str, timeout: int = 300, poll_interval: int = 10) -> Optional[Dict]:
@@ -154,10 +160,16 @@ class NCBIBLAST:
             }
             
             query_info = root.find('.//Query-def')
+            if query_info is None:
+                # 兼容真实 NCBI XML 的 Iteration_query-def 标签
+                query_info = root.find('.//Iteration_query-def')
             if query_info is not None:
                 results['query_id'] = query_info.text
-            
+
             query_len = root.find('.//Query-len')
+            if query_len is None:
+                # 兼容真实 NCBI XML 的 Iteration_query-len 标签
+                query_len = root.find('.//Iteration_query-len')
             if query_len is not None:
                 results['query_length'] = int(query_len.text)
             
@@ -204,7 +216,7 @@ class NCBIBLAST:
             
             return results
         except Exception as e:
-            print(f"解析结果失败: {e}")
+            logger.error(f"解析结果失败: {e}")
             return None
     
     def get_off_target_risk(self, results: Dict, target_gene: str = "", threshold: float = 80.0) -> Dict:

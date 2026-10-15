@@ -11,3 +11,6 @@
 | TC05-005 | demo 命令行冒烟 | 子进程运行 `python demo.py` | 退出码 0，60 秒内完成 |
 | TC05-006 | GUI 模块导入冒烟 | 子进程执行 `import gui` | 无异常退出，输出 GUI_IMPORT_OK（主窗口仅在 __main__ 启动） |
 | TC05-007 | 端到端流程 | 设计 siRNA -> 综合评估 -> GalNAc 修饰方案 -> 结果存 CSV -> 读回 | 全链路无异常，CSV 读回包含 final_score 与修饰输出字段 |
+| TC05-008 | 别名解析单元 | resolve_official_symbol("ALK-7")（Mock Gene 库 ESearch/ESummary） | 返回官方符号 "ACVR1C"（2026-10-15 新增） |
+| TC05-009 | 检索回退流程 | search_nucleotide_mrna("ALK-7")（Mock 5 段响应：无命中→解析→重试→取序列） | 返回 1 条序列，重试请求 URL 使用官方符号 ACVR1C（2026-10-15 新增） |
+| TC05-010 | GUI 源码静态审计 | 扫描 gui.py 源码 | 不存在未定义的 self.gene_name_var 引用，基因取值使用 gene_id_entry（2026-10-15 缺陷回归防护） |

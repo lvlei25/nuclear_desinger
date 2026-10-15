@@ -5,6 +5,9 @@
 from src.sequence_design import NucleicAcidDesigner, SequenceAnalyzer
 from src.chemical_modification import ChemicalModifier, DeliverySystem
 from src.data_processing import DataHandler, SequenceDatabase
+from src.logger import setup_logging, get_logger
+
+logger = get_logger(__name__)
 
 def main():
     print("=" * 60)
@@ -107,4 +110,7 @@ def main():
     print("=" * 60)
 
 if __name__ == "__main__":
+    # 初始化日志：演示过程异常与关键事件写入 log/ 目录
+    setup_logging()
+    logger.info('演示脚本启动')
     main()

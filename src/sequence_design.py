@@ -40,6 +40,9 @@ class NucleicAcidDesigner:
         return self.complement(sequence)[::-1]
 
     def calculate_gc_content(self, sequence: str) -> float:
+        if not sequence:
+            # 空序列无法计算GC含量，统一抛出带明确信息的 ValueError
+            raise ValueError('空序列无法计算GC含量')
         gc_count = sequence.count('G') + sequence.count('C') + sequence.count('g') + sequence.count('c')
         return gc_count / len(sequence) * 100
 
@@ -239,6 +242,10 @@ class NucleicAcidDesigner:
         score = 0
         sense = sense.upper().replace('T', 'U')
 
+        if len(sense) < 19:
+            # Reynolds 评分需要访问第19位（索引18），短序列统一抛出带明确信息的 ValueError
+            raise ValueError('Reynolds评分需要至少19nt序列，实际%dnt' % len(sense))
+
         if sense[18] == 'G':
             score += 1
         if sense[2] == 'A':
@@ -268,6 +275,10 @@ class NucleicAcidDesigner:
         """
         score = 0
         sense = sense.upper().replace('T', 'U')
+
+        if len(sense) < 19:
+            # Amarzguioui 评分需要访问第19位（索引18），短序列统一抛出带明确信息的 ValueError
+            raise ValueError('Amarzguioui评分需要至少19nt序列，实际%dnt' % len(sense))
 
         if sense[0] in ['A', 'C']:
             score += 1

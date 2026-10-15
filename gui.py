@@ -20,6 +20,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.sequence_design import NucleicAcidDesigner, SequenceAnalyzer
 from src.chemical_modification import ChemicalModifier, DeliverySystem
 from src.data_processing import DataHandler, SequenceDatabase
+from src.logger import setup_logging, get_logger, install_excepthook
+
+logger = get_logger(__name__)
 
 
 # NCBI PubMed查询类
@@ -33,6 +36,59 @@ class PubMedQuerier:
     EMAIL = "research@example.com"
     APP_NAME = "NucleicAcidDesignTool"
     
+    @staticmethod
+    def _esearch_ids(db, term, retmax=5):
+        """
+        调用 NCBI ESearch 返回 idlist（网络异常或无命中返回空列表）
+        """
+        params = {
+            "db": db,
+            "term": term,
+            "retmax": retmax,
+            "retmode": "json",
+            "email": PubMedQuerier.EMAIL,
+            "tool": PubMedQuerier.APP_NAME
+        }
+        url = PubMedQuerier.BASE_URL + "esearch.fcgi?" + urllib.parse.urlencode(params)
+        context = ssl._create_unverified_context()
+        try:
+            with urllib.request.urlopen(url, timeout=15, context=context) as response:
+                data = json.loads(response.read().decode('utf-8'))
+            return data.get('esearchresult', {}).get('idlist', [])
+        except Exception as e:
+            logger.warning(f"ESearch({db})请求失败: {str(e)}")
+            return []
+
+    @staticmethod
+    def resolve_official_symbol(gene_name, organism="Homo sapiens[Organism]"):
+        """
+        通过 NCBI Gene 库将基因别名解析为官方符号（如 ALK-7 -> ACVR1C）
+
+        Nucleotide 库的 [Gene Name] 索引只认官方符号，别名需先经 Gene 库解析。
+        解析失败（无命中或网络异常）返回 None，调用方回退到原始输入。
+        """
+        try:
+            id_list = PubMedQuerier._esearch_ids("gene", f"{gene_name} AND {organism}", retmax=1)
+            if not id_list:
+                return None
+
+            params = {
+                "db": "gene",
+                "id": id_list[0],
+                "retmode": "json",
+                "email": PubMedQuerier.EMAIL,
+                "tool": PubMedQuerier.APP_NAME
+            }
+            url = PubMedQuerier.BASE_URL + "esummary.fcgi?" + urllib.parse.urlencode(params)
+            context = ssl._create_unverified_context()
+            with urllib.request.urlopen(url, timeout=15, context=context) as response:
+                data = json.loads(response.read().decode('utf-8'))
+            symbol = data.get('result', {}).get(id_list[0], {}).get('name', '')
+            return symbol or None
+        except Exception as e:
+            logger.warning(f"基因别名解析失败({gene_name}): {str(e)}")
+            return None
+
     @staticmethod
     def search_nucleotide_mrna(gene_name, organism="Homo sapiens[Organism]", max_results=5):
         """
@@ -66,11 +122,30 @@ class PubMedQuerier:
                 with urllib.request.urlopen(search_url, timeout=15, context=context) as response:
                     search_data = json.loads(response.read().decode('utf-8'))
             except (urllib.error.URLError, json.JSONDecodeError, Exception) as e:
-                print(f"NCBI搜索失败: {str(e)}")
+                logger.error(f"NCBI搜索失败: {str(e)}")
                 return []
             
             id_list = search_data.get('esearchresult', {}).get('idlist', [])
-            
+
+            if not id_list:
+                # 原始检索无命中：尝试基因别名解析（如 ALK-7 -> ACVR1C），用官方符号重试一次
+                official = PubMedQuerier.resolve_official_symbol(gene_name, organism)
+                if official and official.upper() != gene_name.upper():
+                    logger.info(f"基因别名解析: {gene_name} -> {official}，使用官方符号重试检索")
+                    retry_term = f"{official}[Gene Name] AND mRNA[Title] AND {organism}"
+                    retry_params = dict(search_params)
+                    retry_params["term"] = retry_term
+                    retry_url = PubMedQuerier.BASE_URL + "esearch.fcgi?" + urllib.parse.urlencode(retry_params)
+                    try:
+                        with urllib.request.urlopen(retry_url, timeout=15, context=context) as response:
+                            retry_data = json.loads(response.read().decode('utf-8'))
+                        id_list = retry_data.get('esearchresult', {}).get('idlist', [])
+                        if id_list:
+                            logger.info(f"官方符号 {official} 检索到 {len(id_list)} 条序列")
+                    except Exception as e:
+                        logger.warning(f"官方符号重试检索失败: {str(e)}")
+                        id_list = []
+
             if not id_list:
                 return []
             
@@ -89,7 +164,7 @@ class PubMedQuerier:
                 with urllib.request.urlopen(fetch_url, timeout=30, context=context) as response:
                     fasta_data = response.read().decode('utf-8')
             except (urllib.error.URLError, Exception) as e:
-                print(f"NCBI序列获取失败: {str(e)}")
+                logger.error(f"NCBI序列获取失败: {str(e)}")
                 return []
             
             sequences = []
@@ -117,7 +192,7 @@ class PubMedQuerier:
             return sequences
             
         except Exception as e:
-            print(f"Nucleotide mRNA查询错误: {str(e)}")
+            logger.error(f"Nucleotide mRNA查询错误: {str(e)}")
             return []
     
     @staticmethod
@@ -146,17 +221,17 @@ class PubMedQuerier:
                         import time
                         time.sleep(1)
                         continue
-                    print(f"网络请求失败 ({attempt+1}/{retries}): {str(e)}")
+                    logger.warning(f"网络请求失败 ({attempt+1}/{retries}): {str(e)}")
                     return None
                 except json.JSONDecodeError as e:
-                    print(f"JSON解析失败: {str(e)}")
+                    logger.error(f"JSON解析失败: {str(e)}")
                     return None
                 except Exception as e:
                     if attempt < retries - 1:
                         import time
                         time.sleep(1)
                         continue
-                    print(f"请求失败 ({attempt+1}/{retries}): {str(e)}")
+                    logger.warning(f"请求失败 ({attempt+1}/{retries}): {str(e)}")
                     return None
         
         def build_search_terms(gene_name, organism, search_mode):
@@ -214,7 +289,7 @@ class PubMedQuerier:
                         if id_list:
                             return id_list, term
                 except Exception as e:
-                    print(f"搜索策略失败: {term}, 错误: {str(e)}")
+                    logger.error(f"搜索策略失败: {term}, 错误: {str(e)}")
             
             return [], ""
         
@@ -297,7 +372,7 @@ class PubMedQuerier:
                             'abstract': abstract[:500] + ("..." if len(abstract) > 500 else "")
                         })
             except Exception as e:
-                print(f"EFetch解析失败: {str(e)}")
+                logger.error(f"EFetch解析失败: {str(e)}")
             
             return articles
         
@@ -305,7 +380,7 @@ class PubMedQuerier:
             id_list, used_term = search_with_fallback(gene_name, organism, max_results, search_mode)
             
             if not id_list:
-                print(f"PubMed搜索失败: {gene_name}")
+                logger.error(f"PubMed搜索失败: {gene_name}")
                 return []
             
             articles = fetch_articles_esummary(id_list)
@@ -316,7 +391,7 @@ class PubMedQuerier:
             return articles
             
         except Exception as e:
-            print(f"PubMed查询错误: {str(e)}")
+            logger.error(f"PubMed查询错误: {str(e)}")
             return []
 
 
@@ -399,7 +474,7 @@ class PubMedQuerier:
             }
             
         except Exception as e:
-            print(f"NCBI Gene查询错误: {str(e)}")
+            logger.error(f"NCBI Gene查询错误: {str(e)}")
             return None
 
 
@@ -2412,32 +2487,32 @@ class NucleicAcidDesignGUI:
         try:
             self.evaluate_structure(sense, antisense)
         except Exception as e:
-            print(f"结构评价失败: {str(e)}")
+            logger.error(f"结构评价失败: {str(e)}")
         
         try:
             self.evaluate_efficacy(sense, antisense)
         except Exception as e:
-            print(f"药效评价失败: {str(e)}")
+            logger.error(f"药效评价失败: {str(e)}")
         
         try:
             self.evaluate_stability(sense, antisense)
         except Exception as e:
-            print(f"稳定性评价失败: {str(e)}")
+            logger.error(f"稳定性评价失败: {str(e)}")
         
         try:
             self.evaluate_specificity(sense, antisense)
         except Exception as e:
-            print(f"特异性评价失败: {str(e)}")
+            logger.error(f"特异性评价失败: {str(e)}")
         
         try:
             self.evaluate_quality(sense, antisense)
         except Exception as e:
-            print(f"质量评价失败: {str(e)}")
+            logger.error(f"质量评价失败: {str(e)}")
         
         try:
             self.evaluate_sirna_rules(sense, antisense)
         except Exception as e:
-            print(f"siRNA规则评价失败: {str(e)}")
+            logger.error(f"siRNA规则评价失败: {str(e)}")
         
         target_region = self.target_region_var.get()
         
@@ -2445,13 +2520,13 @@ class NucleicAcidDesignGUI:
             evaluation = self.designer.comprehensive_sirna_evaluation(sense, target_region_name=target_region)
             self.score_label.config(text=f"总分: {evaluation['final_score']:.1f}/{evaluation['max_score']}")
         except Exception as e:
-            print(f"更新评分失败: {str(e)}")
+            logger.error(f"更新评分失败: {str(e)}")
         
         try:
             self.generate_summary(sense, antisense)
             self.set_status("✓ 序列评价完成", "green")
         except Exception as e:
-            print(f"生成综合评价失败: {str(e)}")
+            logger.error(f"生成综合评价失败: {str(e)}")
             self.set_status("评价部分完成，综合评价生成失败", "orange")
 
     def evaluate_structure(self, sense, antisense):
@@ -2582,7 +2657,7 @@ class NucleicAcidDesignGUI:
         immune_status = self.check_immune_stimulatory(sense)
         sirna_results.append(('免疫刺激序列', immune_status, self.rate_immune(immune_status), self.suggest_immune(immune_status)))
 
-        gene_name = self.gene_name_var.get()
+        gene_name = self.gene_id_entry.get().strip()
         
         try:
             from src.ncbi_blast import NCBIBLAST
@@ -2677,7 +2752,7 @@ class NucleicAcidDesignGUI:
             return
 
         sense = values[2]
-        gene_name = self.gene_name_var.get()
+        gene_name = self.gene_id_entry.get().strip()
 
         if not sense:
             messagebox.showwarning('提示', '序列为空')
@@ -3742,7 +3817,7 @@ class NucleicAcidDesignGUI:
         except Exception as e:
             import traceback
             error_msg = f"设计过程中发生错误: {str(e)}\n\n详细信息:\n{traceback.format_exc()}"
-            print(error_msg)
+            logger.error(error_msg)
             messagebox.showerror("错误", f"设计过程中发生错误: {str(e)}")
             self.set_status("设计失败", "red")
 
@@ -3818,4 +3893,8 @@ def main():
 
 
 if __name__ == "__main__":
+    # 初始化日志：运行状态写入 log/ 目录，未捕获异常同样落盘
+    setup_logging()
+    install_excepthook()
+    logger.info('GUI 程序启动')
     main()

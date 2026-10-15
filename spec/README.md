@@ -10,6 +10,7 @@
 ```
 spec/
 ├── README.md                        # 本说明文件
+├── PROGRESS.md                      # 开发进度总览（记录状态汇总，需与记录同步维护）
 ├── NucleicAcidDesigner.spec         # 打包配置（console 调试版）
 ├── gui.spec                         # 打包配置（windowed 发布版）
 ├── archive/                         # 历史 spec 文件（仅存档，不再维护）
@@ -32,6 +33,44 @@ pyinstaller spec/NucleicAcidDesigner.spec
 
 `archive/` 中的 spec 为早期命名版本，配置不完整（缺少 hiddenimports），仅作历史存档，不要再使用。
 
+## 记录状态管理（生命周期）
+
+每条变更/调试记录在文件头部元数据中维护一个 `状态` 字段，用统一关键词标记当前阶段，配合 `spec/PROGRESS.md` 实现进度同步管理。
+
+### 变更记录状态（spec/changes/）
+
+| 关键词 | 含义 | 进入条件 |
+|--------|------|---------|
+| plan | 已规划 | 方案已写入记录，尚未动代码 |
+| developing | 开发中 | 已开始写代码，功能未完成 |
+| testing | 验证中 | 功能完成，正在跑 testcases/ 或手工验证 |
+| done | 已完成 | 验证通过，验证方式已登记 |
+| abandoned | 已放弃 | 方案变更或需求取消，需在记录中写明原因 |
+
+### 调试记录状态（spec/debug/）
+
+| 关键词 | 含义 | 进入条件 |
+|--------|------|---------|
+| open | 排查中 | 问题确认，正在定位根因 |
+| resolved | 已解决 | 根因、修复方案、验证三者齐备 |
+| wontfix | 不修复 | 规避或接受现状，需写明原因 |
+
+### 状态流转与同步规则
+
+1. 状态沿生命周期正向流转；done / abandoned / resolved / wontfix 为终态，回退需在记录中补充说明
+2. 每次状态变化必须同步更新 `spec/PROGRESS.md` 对应行，做到"记录即进度"
+3. 终态记录不再修改正文，相关新内容开新文件并在开头注明关联记录
+4. 任何变更进入 done 前必须已有对应的测试用例（新增或更新 testcases/），并已在"验证方式"中登记执行结果
+
+### Agent 工作流约定（供后续 AI 会话遵循）
+
+1. 任何开发会话开工前，先读 `spec/PROGRESS.md` 掌握当前进度与待办
+2. 动代码前先在 `spec/changes/`（或 `spec/debug/`）建立记录文件，初始状态 `plan`
+3. 开始编码时状态改为 `developing`，编码完成后改为 `testing`
+4. 每增加新功能或修改既有功能，必须同步新增/更新 testcases/ 对应用例；无对应测试的变更不得置 done
+5. 测试通过（如 `python testcases/run_testcases.py`）后改为 `done` / `resolved`，并同步更新 `spec/PROGRESS.md`
+6. 代码与 spec 记录同步演进：一次功能变更对应一个记录文件与一次提交
+
 ## 功能变更跟踪
 
 每实现一个新功能或修改既有功能，在 `changes/` 下新建记录文件：
@@ -45,6 +84,7 @@ pyinstaller spec/NucleicAcidDesigner.spec
 # 功能变更：<功能名>
 
 - 日期：YYYY-MM-DD
+- 状态：plan（可选值：plan / developing / testing / done / abandoned）
 - 类型：新增功能 / 功能修改 / 功能删除
 - 涉及模块：<如 src/sequence_design.py、gui.py>
 
@@ -74,7 +114,7 @@ pyinstaller spec/NucleicAcidDesigner.spec
 # 调试记录：<问题简述>
 
 - 日期：YYYY-MM-DD
-- 状态：已解决 / 未解决 / 规避
+- 状态：open（可选值：open / resolved / wontfix）
 
 ## 现象
 

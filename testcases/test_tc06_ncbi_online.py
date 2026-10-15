@@ -73,7 +73,8 @@ class TestT06NCBIOnline(unittest.TestCase):
 
     def test_tc06_004_run_blast_online(self):
         """TC06-004 完整在线流程 run_blast"""
-        result = self.blast.run_blast(TEST_SEQUENCE, timeout=180, poll_interval=5)
+        # NCBI 响应时长波动大（高峰期任务排队可超过5分钟），超时取 600s 避开负载高峰误报
+        result = self.blast.run_blast(TEST_SEQUENCE, timeout=600, poll_interval=5)
         self.assertIsNotNone(result, 'NCBI 在线完整流程未在限定时间内返回结果')
         self.assertIn('query_length', result)
         self.assertIn('hits', result)
@@ -81,9 +82,16 @@ class TestT06NCBIOnline(unittest.TestCase):
 
     def test_tc06_005_parse_real_xml(self):
         """TC06-005 真实XML报文解析"""
-        rid = self._submit()
-        xml_text = self._wait_xml(rid)
-        self.assertIsNotNone(xml_text, 'NCBI 任务未在限定时间内完成')
+        # NCBI 偶发对连续提交限流（RID 已发但任务快速 FAILED），失败自动重提，最多 3 次
+        xml_text = None
+        for attempt in range(1, 4):
+            rid = self._submit()
+            xml_text = self._wait_xml(rid, timeout=120)
+            if xml_text:
+                break
+            print(f'第 {attempt}/3 次尝试未完成（NCBI 可能限流），15 秒后重提')
+            time.sleep(15)
+        self.assertIsNotNone(xml_text, 'NCBI 任务未在限定时间内完成（已重试 3 次）')
         result = self.blast.parse_result(xml_text)
         self.assertIsNotNone(result)
         self.assertIn('hits', result)
@@ -92,6 +100,13 @@ class TestT06NCBIOnline(unittest.TestCase):
             self.assertIn('accession', hit)
             self.assertIn('identity_percent', hit)
             self.assertIn('e_value', hit)
+
+    def test_tc06_006_resolve_alias_online(self):
+        """TC06-006 真实别名解析：ALK-7 -> ACVR1C（经 NCBI Gene 库）"""
+        from gui import PubMedQuerier
+        symbol = PubMedQuerier.resolve_official_symbol('ALK-7', 'Homo sapiens[Organism]')
+        self.assertIsNotNone(symbol, 'NCBI Gene 库未解析到 ALK-7（检查网络或别名有效性）')
+        self.assertEqual(symbol.upper(), 'ACVR1C')
 
 
 if __name__ == '__main__':

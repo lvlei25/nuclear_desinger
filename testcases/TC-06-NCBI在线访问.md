@@ -12,12 +12,13 @@
 | TC06-001 | 连通性探测与客户端初始化 | GET CMD=Info | 状态码 200，NCBIBLAST 实例 base_url 正确 |
 | TC06-002 | 提交真实 BLAST 任务 | 21nt 测试序列 AUGAGGAGAUCUCCUCAGGCA | 返回非空 RID 字符串 |
 | TC06-003 | 查询真实任务状态 | 已获取的 RID | 状态 ∈ {WAITING, RUNNING, COMPLETE, FAILED} |
-| TC06-004 | 完整在线流程 run_blast | 同上序列，timeout=180，轮询间隔 5s | 返回结果字典：包含 query_length/hits 键，hits 为列表（实际命中数取决于 NCBI 数据库，允许为空列表） |
-| TC06-005 | 真实 XML 报文解析 | 轮询至 COMPLETE 取原始 XML 后 parse_result | 解析不抛异常；hits 中命中的 accession/identity_percent/e_value 字段存在 |
+| TC06-004 | 完整在线流程 run_blast | 同上序列，timeout=600，轮询间隔 5s（NCBI 高峰期任务排队可超过 5 分钟，2026-10-15 由 180s 两级提升至 600s） | 返回结果字典：包含 query_length/hits 键，hits 为列表（实际命中数取决于 NCBI 数据库，允许为空列表） |
+| TC06-005 | 真实 XML 报文解析 | 轮询至 COMPLETE 取原始 XML 后 parse_result；未完成或 FAILED 自动重提（最多 3 次，间隔 15s，单次等待 120s——NCBI 偶发对连续提交限流，2026-10-15 登记） | 解析不抛异常；hits 中命中的 accession/identity_percent/e_value 字段存在 |
+| TC06-006 | 真实别名解析 | resolve_official_symbol("ALK-7")（经 NCBI Gene 库） | 返回官方符号 ACVR1C（别名自动解析功能在线验证，2026-10-15 新增） |
 
 ## 已知兼容性发现（行为登记，不修改源码）
 
-- NCBI 真实 XML 中查询信息标签为 `Iteration_query-def` / `Iteration_query-len`，而 `parse_result` 查找的是 `.//Query-def` / `.//Query-len`，因此真实报文解析后 `query_id` 为空、`query_length` 为 0；hits 部分标签匹配，解析正常。该差异已登记，如需兼容真实报文请另行提出功能变更。
+- NCBI 真实 XML 中查询信息标签为 `Iteration_query-def` / `Iteration_query-len`。`parse_result` 已于 2026-10-15 增加回退兼容（见 spec/changes/2026-10-15-P0问题修复.md），真实报文的 query_id / query_length 现可正常解析，Mock 层面验证见 TC04-011。
 
 ## 调试修复记录
 

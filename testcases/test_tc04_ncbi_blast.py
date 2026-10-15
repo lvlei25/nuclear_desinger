@@ -30,6 +30,34 @@ SAMPLE_XML = """<BlastOutput>
   </Hit>
 </BlastOutput>"""
 
+# 真实 NCBI 报文形态的 XML（BlastOutput_iterations 包裹，查询标签为 Iteration_query-def / Iteration_query-len）
+REALFORM_XML = """<?xml version="1.0"?>
+<BlastOutput>
+  <BlastOutput_iterations>
+    <Iteration>
+      <Iteration_iter-num>1</Iteration_iter-num>
+      <Iteration_query-def>Query_1</Iteration_query-def>
+      <Iteration_query-len>21</Iteration_query-len>
+      <Iteration_hits>
+        <Hit>
+          <Hit_num>1</Hit_num>
+          <Hit_id>gi|999|ref|NM_000001.1|</Hit_id>
+          <Hit_def>synthetic construct targetgene mRNA</Hit_def>
+          <Hit_accession>NM_000001</Hit_accession>
+          <Hit_len>21</Hit_len>
+          <Hsp>
+            <Hsp_identity>19</Hsp_identity>
+            <Hsp_align-len>21</Hsp_align-len>
+            <Hsp_evalue>0.001</Hsp_evalue>
+            <Hsp_score>39.5</Hsp_score>
+            <Hsp_strand>Plus/Plus</Hsp_strand>
+          </Hsp>
+        </Hit>
+      </Iteration_hits>
+    </Iteration>
+  </BlastOutput_iterations>
+</BlastOutput>"""
+
 
 def make_response(status_code=200, text=''):
     """构造 Mock HTTP 响应"""
@@ -147,6 +175,15 @@ class TestT04ParseAndRisk(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result['query_id'], 'Query_1')
         self.assertEqual(len(result['hits']), 1)
+
+    def test_tc04_011_realform_xml_parse(self):
+        """TC04-011 真实 NCBI 形态 XML 解析（P0-3：Iteration_query-def/len 标签兼容）"""
+        result = self.blast.parse_result(REALFORM_XML)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['query_id'], 'Query_1')
+        self.assertEqual(result['query_length'], 21)
+        self.assertEqual(len(result['hits']), 1)
+        self.assertEqual(result['hits'][0]['accession'], 'NM_000001')
 
 
 if __name__ == '__main__':

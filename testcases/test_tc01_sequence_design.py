@@ -39,8 +39,8 @@ class TestT01BasicCalc(unittest.TestCase):
         self.assertAlmostEqual(self.d.calculate_gc_content('ATCGCG'), 66.67, places=2)
 
     def test_tc01_005_gc_content_empty(self):
-        """TC01-005 GC含量空序列（行为登记：抛 ZeroDivisionError）"""
-        with self.assertRaises(ZeroDivisionError):
+        """TC01-005 GC含量空序列（P0-4 边界统一：抛 ValueError）"""
+        with self.assertRaises(ValueError):
             self.d.calculate_gc_content('')
 
     def test_tc01_006_is_valid_sequence(self):
@@ -146,6 +146,15 @@ class TestT01Scoring(unittest.TestCase):
         safe, warnings = self.d.check_immune_stimulatory(S1)
         self.assertTrue(safe)
         self.assertEqual(warnings, [])
+
+    def test_tc01_031_short_sequence_scoring_guard(self):
+        """TC01-031 短序列评分防护（P0-4：IndexError 统一为带明确信息的 ValueError）"""
+        for seq in ('AUGC', ''):
+            with self.assertRaises(ValueError) as ctx:
+                self.d.reynolds_score(seq)
+            self.assertIn('19nt', str(ctx.exception))
+            with self.assertRaises(ValueError):
+                self.d.amarzguioui_score(seq)
 
 
 class TestT01RegionAndOffTarget(unittest.TestCase):

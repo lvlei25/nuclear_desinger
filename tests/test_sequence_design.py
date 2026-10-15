@@ -12,18 +12,21 @@ class TestNucleicAcidDesigner(unittest.TestCase):
     
     def test_complement(self):
         sequence = "ATCG"
-        expected = "TAGC"
+        # 实现按RNA方向转换：T -> U，正确期望为 UAGC
+        expected = "UAGC"
         self.assertEqual(self.designer.complement(sequence), expected)
-    
+
     def test_reverse_complement(self):
         sequence = "ATCG"
-        expected = "CGAT"
+        # 实现按RNA方向转换：T -> U，正确期望为 CGAU
+        expected = "CGAU"
         self.assertEqual(self.designer.reverse_complement(sequence), expected)
-    
+
     def test_gc_content(self):
         sequence = "ATCGCG"
-        expected = 50.0
-        self.assertEqual(self.designer.calculate_gc_content(sequence), expected)
+        # ATCGCG 中 GC 4/6，正确期望为 66.67
+        expected = 66.67
+        self.assertAlmostEqual(self.designer.calculate_gc_content(sequence), expected, places=2)
     
     def test_is_valid_sequence(self):
         self.assertTrue(self.designer.is_valid_sequence("ATCG"))

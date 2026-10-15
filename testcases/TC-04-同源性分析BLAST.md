@@ -14,3 +14,4 @@
 | TC04-008 | 低于阈值过滤 | 追加 identity 70.0 命中 | 不计入任何风险级别，total_hits 不变 |
 | TC04-009 | 目标基因自身排除 | identity 95 且描述含 "targetgene" | 不计入风险，target_excluded=True |
 | TC04-010 | run_blast 完整流程 | Mock 提交成功且首轮即 COMPLETE | 返回解析后的结果字典（含 hits），全程无真实网络与长轮询 |
+| TC04-011 | 真实形态 XML 解析 | parse_result(REALFORM_XML)（Iteration_query-def/len 标签） | query_id="Query_1"、query_length=21、hits 正常解析（P0-3 兼容修复） |
