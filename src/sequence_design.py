@@ -8,12 +8,17 @@ import re
 import math
 from typing import List, Tuple, Optional, Dict
 
+from config.settings import ScoringConfig
+
 class NucleicAcidDesigner:
     """
     小核酸序列设计器
     """
 
-    def __init__(self):
+    def __init__(self, config: Optional[ScoringConfig] = None):
+        # 评分权重与阈值统一走配置；默认值与历史硬编码完全一致
+        self.config = config if config is not None else ScoringConfig.default()
+
         self.complement_map = {
             'A': 'U', 'T': 'A', 'C': 'G', 'G': 'C',
             'a': 'u', 't': 'a', 'c': 'g', 'g': 'c',
@@ -106,7 +111,7 @@ class NucleicAcidDesigner:
         if query_len == 0 or subject_len == 0:
             return 0.0, "序列为空"
         
-        seed_size = 7
+        seed_size = self.config.seed_size
         seed_matches = []
         
         for i in range(query_len - seed_size + 1):
@@ -122,10 +127,11 @@ class NucleicAcidDesigner:
         best_align = ""
         
         for seed_i, seed_j in seed_matches:
-            start_i = max(0, seed_i - 5)
-            start_j = max(0, seed_j - 5)
-            end_i = min(query_len, seed_i + seed_size + 5)
-            end_j = min(subject_len, seed_j + seed_size + 5)
+            flank = self.config.seed_flank
+            start_i = max(0, seed_i - flank)
+            start_j = max(0, seed_j - flank)
+            end_i = min(query_len, seed_i + seed_size + flank)
+            end_j = min(subject_len, seed_j + seed_size + flank)
             
             query_segment = query[start_i:end_i]
             subject_segment = subject[start_j:end_j]
@@ -165,7 +171,7 @@ class NucleicAcidDesigner:
             'has_off_target': False,
             'matches': [],
             'max_identity': 0.0,
-            'threshold': 80.0
+            'threshold': self.config.off_target_identity_min
         }
 
         window_size = len(sense)
@@ -185,7 +191,7 @@ class NucleicAcidDesigner:
 
             max_identity = max(sense_identity, antisense_identity)
             
-            if max_identity >= 80.0 and max_identity < 100.0:
+            if self.config.off_target_identity_min <= max_identity < self.config.off_target_identity_max:
                 strand = "正义链" if sense_identity >= antisense_identity else "反义链"
                 matches = sense_matches if sense_identity >= antisense_identity else antisense_matches
                 
@@ -214,17 +220,17 @@ class NucleicAcidDesigner:
         reynolds = self.reynolds_score(sense)
         immune_safe, immune_warnings = self.check_immune_stimulatory(sense)
 
-        hf1_pass = 25.0 <= gc <= 65.0
-        hf2_pass = not re.search(r'(.)\1{4,}', sense)
-        hf3_pass = reynolds >= 2
+        hf1_pass = self.config.hf1_gc_min <= gc <= self.config.hf1_gc_max
+        hf2_pass = not re.search(r'(.)\1{%d,}' % (self.config.hf2_poly_run - 1), sense)
+        hf3_pass = reynolds >= self.config.hf3_reynolds_min
         hf4_pass = immune_safe
 
         all_pass = hf1_pass and hf2_pass and hf3_pass and hf4_pass
 
         filter_results = {
-            'hf1_gc': {'pass': hf1_pass, 'value': gc, 'standard': '25-65%'},
-            'hf2_poly': {'pass': hf2_pass, 'value': '无≥5连续', 'standard': '≤5连续'},
-            'hf3_reynolds': {'pass': hf3_pass, 'value': reynolds, 'standard': '≥2'},
+            'hf1_gc': {'pass': hf1_pass, 'value': gc, 'standard': '%g-%g%%' % (self.config.hf1_gc_min, self.config.hf1_gc_max)},
+            'hf2_poly': {'pass': hf2_pass, 'value': '无≥%d连续' % self.config.hf2_poly_run, 'standard': '≤%d连续' % self.config.hf2_poly_run},
+            'hf3_reynolds': {'pass': hf3_pass, 'value': reynolds, 'standard': '≥%d' % self.config.hf3_reynolds_min},
             'hf4_immune': {'pass': hf4_pass, 'value': immune_warnings, 'standard': '无免疫刺激'},
             'all_pass': all_pass
         }
@@ -259,7 +265,7 @@ class NucleicAcidDesigner:
             score += 1
 
         gc = self.calculate_gc_content(sense)
-        if 30.0 <= gc <= 55.0:
+        if self.config.rule_gc_min <= gc <= self.config.rule_gc_max:
             score += 1
 
         if not re.search(r'(.)\1{3,}', sense):
@@ -291,7 +297,7 @@ class NucleicAcidDesigner:
             score += 1
 
         gc = self.calculate_gc_content(sense)
-        if 30.0 <= gc <= 55.0:
+        if self.config.rule_gc_min <= gc <= self.config.rule_gc_max:
             score += 1
 
         if not re.search(r'UUU', sense):
@@ -320,18 +326,18 @@ class NucleicAcidDesigner:
         # UT2: 反义链1位 = G或C
         ut2 = a[0] in ('G', 'C')
         
-        # UT3: GC含量 30-55%
+        # UT3: GC含量 rule_gc_min-rule_gc_max%
         gc = self.calculate_gc_content(s)
-        ut3 = 30.0 <= gc <= 55.0
+        ut3 = self.config.rule_gc_min <= gc <= self.config.rule_gc_max
         
         # UT4: 无≥4连续相同碱基
         has_poly4 = re.search(r'(.)\1{3,}', s)
         ut4 = not has_poly4
         
-        # UT5: 正义链5'端ΔG > -5.0 kcal/mol
+        # UT5: 正义链5'端ΔG 高于配置阈值
         s5 = s[:4]
         dg = sum(self.nn_params.get(s5[i:i+2], -1.0) for i in range(len(s5) - 1))
-        ut5 = dg > -5.0
+        ut5 = dg > self.config.uitei_dg_threshold
 
         all_pass = ut1 and ut2 and ut3 and ut4 and ut5
 
@@ -344,11 +350,11 @@ class NucleicAcidDesigner:
             if not ut2:
                 reasons.append(f"反义链1位为{a[0]}，应为G/C")
             if not ut3:
-                reasons.append(f"GC含量{gc:.1f}%，不在30-55%")
+                reasons.append("GC含量%.1f%%，不在%g-%g%%" % (gc, self.config.rule_gc_min, self.config.rule_gc_max))
             if not ut4:
                 reasons.append(f"含≥4连续碱基: {has_poly4.group()}")
             if not ut5:
-                reasons.append(f"正义链5'端ΔG={dg:.1f}≤-5.0")
+                reasons.append(f"正义链5'端ΔG={dg:.1f}≤{self.config.uitei_dg_threshold:g}")
             return False, "; ".join(reasons)
 
     def thermodynamic_asymmetry(self, sense: str) -> Tuple[bool, float]:
@@ -412,34 +418,36 @@ class NucleicAcidDesigner:
         5'-UTR: +0
         起始密码子附近: -5
         """
-        cds_start = int(mrna_length * 0.25)
-        cds_end = int(mrna_length * 0.75)
+        cfg = self.config
+        cds_start = int(mrna_length * cfg.cds_start_fraction)
+        cds_end = int(mrna_length * cfg.cds_end_fraction)
         
-        start_codon_region_start = max(0, cds_start - 50)
-        start_codon_region_end = cds_start + 50
+        start_codon_region_start = max(0, cds_start - cfg.start_codon_window)
+        start_codon_region_end = cds_start + cfg.start_codon_window
         
         if start_codon_region_start <= position <= start_codon_region_end:
-            return -5, "起始密码子附近"
+            return cfg.start_codon_penalty, "起始密码子附近"
         elif position > cds_end:
-            return 10, "3'-UTR"
+            return cfg.utr3_bonus, "3'-UTR"
         elif position >= cds_start:
-            return 5, "CDS"
+            return cfg.cds_bonus, "CDS"
         else:
-            return 0, "5'-UTR"
+            return cfg.utr5_bonus, "5'-UTR"
     
     def get_target_region_bonus_by_name(self, region_name: str) -> Tuple[int, str]:
         """
         根据靶区域名称直接返回加分
         """
+        cfg = self.config
         bonus_map = {
-            "3'-UTR": (10, "3'-UTR"),
-            "5'-UTR": (0, "5'-UTR"),
-            "CDS": (5, "CDS"),
-            "起始密码子附近": (-5, "起始密码子附近"),
-            "3'UTR": (10, "3'-UTR"),
-            "5'UTR": (0, "5'-UTR"),
+            "3'-UTR": (cfg.utr3_bonus, "3'-UTR"),
+            "5'-UTR": (cfg.utr5_bonus, "5'-UTR"),
+            "CDS": (cfg.cds_bonus, "CDS"),
+            "起始密码子附近": (cfg.start_codon_penalty, "起始密码子附近"),
+            "3'UTR": (cfg.utr3_bonus, "3'-UTR"),
+            "5'UTR": (cfg.utr5_bonus, "5'-UTR"),
         }
-        return bonus_map.get(region_name, (5, "CDS"))
+        return bonus_map.get(region_name, (cfg.cds_bonus, "CDS"))
 
     def comprehensive_sirna_evaluation(self, sense: str, position: int = 0, mrna_length: int = 0, target_region_name: str = None) -> Dict:
         """
@@ -466,7 +474,7 @@ class NucleicAcidDesigner:
         thermo_pass, thermo_diff = self.thermodynamic_asymmetry(sense)
         uitei_pass, uitei_reason = self.uitei_check(sense)
 
-        optimal_gc = 30.0 <= gc <= 55.0
+        optimal_gc = self.config.rule_gc_min <= gc <= self.config.rule_gc_max
 
         if target_region_name is not None:
             target_bonus, target_region = self.get_target_region_bonus_by_name(target_region_name)
@@ -475,19 +483,21 @@ class NucleicAcidDesigner:
 
         total_score = 0.0
 
-        if hard_pass:
-            total_score += 30
+        cfg = self.config
 
-        total_score += reynolds * 4
-        total_score += amarzguioui * 3
-        total_score += seed_complexity * 8
+        if hard_pass:
+            total_score += cfg.hard_pass_bonus
+
+        total_score += reynolds * cfg.reynolds_weight
+        total_score += amarzguioui * cfg.amarzguioui_weight
+        total_score += seed_complexity * cfg.seed_complexity_weight
 
         if thermo_pass:
-            total_score += 3
+            total_score += cfg.thermo_asymmetry_bonus
         if uitei_pass:
-            total_score += 3
+            total_score += cfg.uitei_pass_bonus
         if optimal_gc:
-            total_score += 5
+            total_score += cfg.optimal_gc_bonus
 
         total_score += target_bonus
 
@@ -509,13 +519,13 @@ class NucleicAcidDesigner:
             'optimal_gc': optimal_gc,
             'target_bonus': target_bonus,
             'final_score': total_score,
-            'max_score': 96,
+            'max_score': cfg.max_score,
             'recommendation': ''
         }
 
-        if hard_pass and total_score >= 70:
+        if hard_pass and total_score >= cfg.recommend_threshold:
             evaluation['recommendation'] = '推荐'
-        elif hard_pass and total_score >= 50:
+        elif hard_pass and total_score >= cfg.good_threshold:
             evaluation['recommendation'] = '良好'
         elif hard_pass:
             evaluation['recommendation'] = '一般'
@@ -573,7 +583,8 @@ class NucleicAcidDesigner:
         off_target_result = self.check_off_target(sense, mrna)
         if not off_target_result['has_off_target']:
             return 100.0
-        penalty = min(len(off_target_result['matches']) * 5, 50)
+        penalty = min(len(off_target_result['matches']) * self.config.off_target_penalty_per_match,
+                      self.config.off_target_penalty_cap)
         return max(0.0, 100.0 - penalty)
 
     def design_aso(self, target_mrna: str, target_region: str) -> Optional[str]:

@@ -2,7 +2,7 @@
 
 > 本文件是 spec 记录状态的唯一汇总视图：任何记录的状态变化必须同步更新本表，做到"记录即进度"。
 > 状态关键词定义见 `spec/README.md` 的"记录状态管理（生命周期）"。
-> 最后更新：2026-10-15
+> 最后更新：2026-10-17
 
 ## 模块状态总览
 
@@ -14,7 +14,8 @@
 | src/ncbi_blast.py | NCBI BLAST 客户端 | 稳定（真实访问缺陷已修复；parse_result 已兼容真实 XML 标签） |
 | gui.py | Tkinter 图形界面 | 稳定（错误路径已接入 logging） |
 | src/logger.py | 日志系统（按天落盘 log/ 目录） | 稳定（2026-10-15 新增） |
-| testcases/ | 测试用例体系（8 组 88 条） | 持续维护 |
+| config/settings.py | ScoringConfig 评分配置（外置权重与阈值） | 稳定（2026-10-17 外置，默认值=历史硬编码） |
+| testcases/ | 测试用例体系（9 组 98 条） | 持续维护 |
 | tests/ | 早期单元测试（13 条） | 全绿（2026-10-15 修正 4 处历史断言） |
 
 ## 变更记录状态（spec/changes/）
@@ -28,6 +29,7 @@
 | 2026-10-15-log日志系统.md | done | 2026-10-15 |
 | 2026-10-15-基因别名自动解析.md | done | 2026-10-15 |
 | 2026-10-15-TC06在线用例提交重试.md | done | 2026-10-15 |
+| 2026-10-17-P1工程质量-配置外置-版本号-CI.md | done | 2026-10-17 |
 
 ## 调试记录状态（spec/debug/）
 
@@ -40,12 +42,12 @@
 
 ### P1 工程质量
 
+- ~~配置外置~~：已完成（2026-10-17，见 spec/changes/2026-10-17-P1工程质量-配置外置-版本号-CI.md，ScoringConfig 外置全部权重与阈值）
+- ~~版本号~~：已完成（2026-10-17，__version__=1.1.0 + CHANGELOG.md 追溯链）
+- ~~CI~~：已完成（2026-10-17，.github/workflows/tests.yml，SKIP_ONLINE_TESTS=1 跳过 TC-06 在线组）
 - GUI 业务逻辑抽离：gui.py 2000+ 行单文件，界面与业务耦合，抽成 src/ 可测模块
-- 配置外置：评分权重与阈值（脱靶 [80,100)、GC 25-65% 等）硬编码，抽成配置文件或 dataclass
 - logging 剩余范围：基础版已完成（log/ 目录按天落盘、入口与错误路径接入）；剩余为剩余散落输出的清理与 GUI 界面内嵌日志查看（可选）
 - 已上市药物知识库：扩展 data/approved_drugs.json（Inclisiran/Givosiran/Lumasiran/Vutrisiran 等），作回归基准与修饰参考
-- CI：GitHub Actions 跑 run_testcases.py（TC-06 用环境变量控制跳过）
-- 版本号：加 __version__ 与 CHANGELOG，配合 spec 机制形成追溯链
 
 ### P2 科学性增强
 

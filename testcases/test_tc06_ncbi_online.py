@@ -21,6 +21,9 @@ class TestT06NCBIOnline(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.blast = NCBIBLAST()
+        # 环境变量强制跳过（CI / 无网环境使用）：SKIP_ONLINE_TESTS=1
+        if os.environ.get('SKIP_ONLINE_TESTS', '').strip().lower() in ('1', 'true', 'yes'):
+            raise unittest.SkipTest('SKIP_ONLINE_TESTS=1，按环境变量要求跳过在线用例')
         # 本机直连 NCBI 稳定，但长轮询经系统代理易被中断，测试进程内绕过代理
         os.environ['NO_PROXY'] = 'blast.ncbi.nlm.nih.gov'
         os.environ['no_proxy'] = 'blast.ncbi.nlm.nih.gov'
